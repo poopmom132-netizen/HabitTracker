@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { TrendingUp, RotateCcw, Trash2, CheckCircle, FileText } from 'lucide-react';
+import { TrendingUp, RotateCcw, Trash2, Play, FileText, Clock } from 'lucide-react';
 
 interface Habit {
   id: string;
@@ -9,6 +9,7 @@ interface Habit {
   current_streak: number;
   longest_streak: number;
   last_reset_date: string | null;
+  last_tracked_at: string | null;
 }
 
 interface HabitCardProps {
@@ -25,16 +26,50 @@ interface HabitLog {
 
 export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
   const [loading, setLoading] = useState(false);
-  const [showAddDayModal, setShowAddDayModal] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
-  const [dayNotes, setDayNotes] = useState('');
+  const [notes, setNotes] = useState('');
   const [resetReason, setResetReason] = useState('');
   const [recentLogs, setRecentLogs] = useState<HabitLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [canTrack, setCanTrack] = useState(true);
 
   useEffect(() => {
     fetchRecentLogs();
-  }, [habit.id]);
+    calculateTimeRemaining();
+
+    const interval = setInterval(() => {
+      calculateTimeRemaining();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [habit.id, habit.last_tracked_at]);
+
+  const calculateTimeRemaining = () => {
+    if (!habit.last_tracked_at) {
+      setCanTrack(true);
+      setTimeRemaining('');
+      return;
+    }
+
+    const lastTracked = new Date(habit.last_tracked_at).getTime();
+    const now = new Date().getTime();
+    const elapsed = now - lastTracked;
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const remaining = twentyFourHours - elapsed;
+
+    if (remaining <= 0) {
+      setCanTrack(true);
+      setTimeRemaining('');
+    } else {
+      setCanTrack(false);
+      const hours = Math.floor(remaining / (60 * 60 * 1000));
+      const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+      const seconds = Math.floor((remaining % (60 * 1000)) / 1000);
+      setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+    }
+  };
 
   const fetchRecentLogs = async () => {
     try {
@@ -60,18 +95,22 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
     return diffDays;
   };
 
-  const handleAddDay = async () => {
+  const handleStartTracking = async () => {
+    if (!canTrack) return;
+
     setLoading(true);
     try {
       const newStreak = habit.current_streak + 1;
       const newLongestStreak = Math.max(newStreak, habit.longest_streak);
+      const now = new Date().toISOString();
 
       const { error: updateError } = await supabase
         .from('habits')
         .update({
           current_streak: newStreak,
           longest_streak: newLongestStreak,
-          updated_at: new Date().toISOString(),
+          last_tracked_at: now,
+          updated_at: now,
         })
         .eq('id', habit.id);
 
@@ -83,18 +122,41 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
           habit_id: habit.id,
           status: 'success',
           log_date: new Date().toISOString().split('T')[0],
-          notes: dayNotes,
+          notes: '',
         });
 
       if (logError) throw logError;
 
-      setDayNotes('');
-      setShowAddDayModal(false);
       fetchRecentLogs();
       onUpdate();
     } catch (error: any) {
-      console.error('Error adding day:', error.message);
-      alert('Failed to add day');
+      console.error('Error starting tracking:', error.message);
+      alert('Failed to start tracking');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('habit_logs')
+        .insert({
+          habit_id: habit.id,
+          status: 'note',
+          log_date: new Date().toISOString().split('T')[0],
+          notes: notes,
+        });
+
+      if (error) throw error;
+
+      setNotes('');
+      setShowNotesModal(false);
+      fetchRecentLogs();
+    } catch (error: any) {
+      console.error('Error adding note:', error.message);
+      alert('Failed to add note');
     } finally {
       setLoading(false);
     }
@@ -208,24 +270,47 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
         </div>
       </div>
 
+      {timeRemaining && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center justify-center gap-2 text-blue-700">
+            <Clock className="w-5 h-5" />
+            <div className="text-center">
+              <div className="text-sm font-medium">Next check-in available in</div>
+              <div className="text-xl font-bold">{timeRemaining}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <button
-          onClick={() => setShowAddDayModal(true)}
-          disabled={loading}
+          onClick={handleStartTracking}
+          disabled={loading || !canTrack}
           className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <CheckCircle className="w-5 h-5" />
-          Add Day
+          <Play className="w-5 h-5" />
+          {canTrack ? 'Start Tracking' : 'Tracking Active'}
         </button>
 
-        <button
-          onClick={() => setShowResetModal(true)}
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RotateCcw className="w-4 h-4" />
-          Reset Streak
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowNotesModal(true)}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileText className="w-4 h-4" />
+            Add Note
+          </button>
+
+          <button
+            onClick={() => setShowResetModal(true)}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset
+          </button>
+        </div>
       </div>
 
       {recentLogs.length > 0 && (
@@ -246,6 +331,8 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
                   className={`p-2 rounded-lg text-xs ${
                     log.status === 'reset'
                       ? 'bg-red-50 border border-red-200'
+                      : log.status === 'note'
+                      ? 'bg-blue-50 border border-blue-200'
                       : 'bg-emerald-50 border border-emerald-200'
                   }`}
                 >
@@ -257,10 +344,12 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         log.status === 'reset'
                           ? 'bg-red-200 text-red-800'
+                          : log.status === 'note'
+                          ? 'bg-blue-200 text-blue-800'
                           : 'bg-emerald-200 text-emerald-800'
                       }`}
                     >
-                      {log.status === 'reset' ? 'Reset' : 'Success'}
+                      {log.status === 'reset' ? 'Reset' : log.status === 'note' ? 'Note' : 'Check-in'}
                     </span>
                   </div>
                   {log.notes && (
@@ -273,25 +362,25 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
         </div>
       )}
 
-      {showAddDayModal && (
+      {showNotesModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Add a Day</h3>
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Add a Note</h3>
             <p className="text-gray-600 mb-4">
-              Add notes or details about your success today (optional)
+              Record your thoughts, feelings, or observations
             </p>
             <textarea
-              value={dayNotes}
-              onChange={(e) => setDayNotes(e.target.value)}
-              placeholder="How are you feeling? What helped you stay strong today?"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="How are you feeling? What's on your mind?"
               rows={4}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition mb-4"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition mb-4"
             />
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setShowAddDayModal(false);
-                  setDayNotes('');
+                  setShowNotesModal(false);
+                  setNotes('');
                 }}
                 disabled={loading}
                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
@@ -299,11 +388,11 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
                 Cancel
               </button>
               <button
-                onClick={handleAddDay}
-                disabled={loading}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleAddNote}
+                disabled={loading || !notes.trim()}
+                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Adding...' : 'Add Day'}
+                {loading ? 'Saving...' : 'Save Note'}
               </button>
             </div>
           </div>
