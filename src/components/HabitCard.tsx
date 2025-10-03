@@ -170,6 +170,7 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
         .update({
           current_streak: 0,
           last_reset_date: new Date().toISOString(),
+          last_tracked_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', habit.id);
