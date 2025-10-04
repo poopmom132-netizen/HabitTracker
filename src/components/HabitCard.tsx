@@ -33,7 +33,6 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
   const [recentLogs, setRecentLogs] = useState<HabitLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
-  const [canTrack, setCanTrack] = useState(true);
 
   useEffect(() => {
     fetchRecentLogs();
@@ -48,7 +47,6 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
 
   const calculateTimeElapsed = () => {
     if (!habit.last_tracked_at) {
-      setCanTrack(true);
       setTimeRemaining('0d 0h 0m');
       return;
     }
@@ -62,7 +60,6 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
     const minutes = Math.floor((elapsed % (60 * 60 * 1000)) / (60 * 1000));
 
     setTimeRemaining(`${days}d ${hours}h ${minutes}m`);
-    setCanTrack(true);
   };
 
   const fetchRecentLogs = async () => {
