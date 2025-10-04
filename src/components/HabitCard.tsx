@@ -37,38 +37,32 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
 
   useEffect(() => {
     fetchRecentLogs();
-    calculateTimeRemaining();
+    calculateTimeElapsed();
 
     const interval = setInterval(() => {
-      calculateTimeRemaining();
+      calculateTimeElapsed();
     }, 1000);
 
     return () => clearInterval(interval);
   }, [habit.id, habit.last_tracked_at]);
 
-  const calculateTimeRemaining = () => {
+  const calculateTimeElapsed = () => {
     if (!habit.last_tracked_at) {
       setCanTrack(true);
-      setTimeRemaining('');
+      setTimeRemaining('0d 0h 0m');
       return;
     }
 
     const lastTracked = new Date(habit.last_tracked_at).getTime();
     const now = new Date().getTime();
     const elapsed = now - lastTracked;
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    const remaining = twentyFourHours - elapsed;
 
-    if (remaining <= 0) {
-      setCanTrack(true);
-      setTimeRemaining('');
-    } else {
-      setCanTrack(false);
-      const hours = Math.floor(remaining / (60 * 60 * 1000));
-      const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
-      const seconds = Math.floor((remaining % (60 * 1000)) / 1000);
-      setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-    }
+    const days = Math.floor(elapsed / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((elapsed % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((elapsed % (60 * 60 * 1000)) / (60 * 1000));
+
+    setTimeRemaining(`${days}d ${hours}h ${minutes}m`);
+    setCanTrack(true);
   };
 
   const fetchRecentLogs = async () => {
@@ -96,19 +90,13 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
   };
 
   const handleStartTracking = async () => {
-    if (!canTrack) return;
-
     setLoading(true);
     try {
-      const newStreak = habit.current_streak + 1;
-      const newLongestStreak = Math.max(newStreak, habit.longest_streak);
       const now = new Date().toISOString();
 
       const { error: updateError } = await supabase
         .from('habits')
         .update({
-          current_streak: newStreak,
-          longest_streak: newLongestStreak,
           last_tracked_at: now,
           updated_at: now,
         })
@@ -271,26 +259,24 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
         </div>
       </div>
 
-      {timeRemaining && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="flex items-center justify-center gap-2 text-blue-700">
-            <Clock className="w-5 h-5" />
-            <div className="text-center">
-              <div className="text-sm font-medium">Next check-in available in</div>
-              <div className="text-xl font-bold">{timeRemaining}</div>
-            </div>
+      <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-center justify-center gap-2 text-blue-700">
+          <Clock className="w-5 h-5" />
+          <div className="text-center">
+            <div className="text-sm font-medium">Time elapsed</div>
+            <div className="text-xl font-bold">{timeRemaining}</div>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="space-y-2">
         <button
           onClick={handleStartTracking}
-          disabled={loading || !canTrack}
+          disabled={loading}
           className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Play className="w-5 h-5" />
-          {canTrack ? 'Start Tracking' : 'Tracking Active'}
+          Start Tracking
         </button>
 
         <div className="grid grid-cols-2 gap-2">
