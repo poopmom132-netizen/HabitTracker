@@ -87,36 +87,44 @@ export default function HabitCard({ habit, onUpdate }: HabitCardProps) {
   };
 
   const handleStartTracking = async () => {
+    console.log('Start tracking clicked');
     setLoading(true);
     try {
       const now = new Date().toISOString();
+      console.log('Updating habit with last_tracked_at:', now);
 
-      const { error: updateError } = await supabase
+      const { data: updateData, error: updateError } = await supabase
         .from('habits')
         .update({
           last_tracked_at: now,
           updated_at: now,
         })
-        .eq('id', habit.id);
+        .eq('id', habit.id)
+        .select();
 
+      console.log('Update result:', { updateData, updateError });
       if (updateError) throw updateError;
 
-      const { error: logError } = await supabase
+      console.log('Inserting habit log');
+      const { data: logData, error: logError } = await supabase
         .from('habit_logs')
         .insert({
           habit_id: habit.id,
           status: 'success',
           log_date: new Date().toISOString().split('T')[0],
           notes: '',
-        });
+        })
+        .select();
 
+      console.log('Log insert result:', { logData, logError });
       if (logError) throw logError;
 
+      console.log('Success! Refreshing data...');
       fetchRecentLogs();
       onUpdate();
     } catch (error: any) {
-      console.error('Error starting tracking:', error.message);
-      alert('Failed to start tracking');
+      console.error('Error starting tracking:', error);
+      alert(`Failed to start tracking: ${error.message}`);
     } finally {
       setLoading(false);
     }
