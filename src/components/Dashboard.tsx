@@ -11,6 +11,7 @@ interface Habit {
   current_streak: number;
   longest_streak: number;
   last_reset_date: string | null;
+  last_tracked_at: string | null;
 }
 
 export default function Dashboard() {
